@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>House Sensor Station v3</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:     #080b12; --surf:   #0e1220; --card:   #131827;
+  --border: rgba(255,255,255,0.06); --text:   #dde4f0; --muted:  #5a6480;
+  --blue:   #4fa8ff; --green:  #2de0a5; --orange: #ffaa36;
+  --red:    #ff5e5e; --purple: #b07aff; --mono:   'IBM Plex Mono',monospace;
+  --display:'Syne',sans-serif;
+}
+body { font-family: var(--mono); background: var(--bg); color: var(--text); min-height:100vh; }
+
+header {
+  background: var(--surf); border-bottom: 1px solid var(--border);
+  padding: 16px 28px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;
+}
+.brand { font-family:var(--display); font-size:20px; font-weight:800; }
+.brand em { color:var(--blue); font-style:normal; }
+.dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--green);
+       margin-right:8px; animation:blink 2s ease-in-out infinite; }
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:.3} }
+#ts { font-size:11px; color:var(--muted); }
+
+.config { display:flex; align-items:center; gap:10px; padding:12px 28px;
+          background:var(--surf); border-bottom:1px solid var(--border); flex-wrap:wrap; }
+.config label { font-size:11px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; }
+.config input { background:var(--bg); border:1px solid var(--border); border-radius:6px;
+                color:var(--text); font-family:var(--mono); font-size:12px;
+                padding:6px 10px; width:280px; outline:none; }
+.config input:focus { border-color:var(--blue); }
+.btn { background:var(--blue); border:none; border-radius:6px; color:#fff;
+       cursor:pointer; font-family:var(--display); font-size:12px; font-weight:700;
+       padding:7px 16px; }
+.btn:hover { opacity:.85; }
+#err { font-size:11px; color:var(--red); }
+
+/* Alert banner CO */
+.co-banner { display:none; align-items:center; gap:12px; padding:10px 28px;
+             background:#3a1010; border-bottom:2px solid var(--red); }
+.co-banner.show { display:flex; }
+.co-banner span { font-size:13px; color:var(--red); }
+.co-banner strong { color:#fff; }
+
+.room-tabs { display:flex; gap:6px; padding:16px 28px 0; flex-wrap:wrap; }
+.tab { background:var(--surf); border:1px solid var(--border); border-radius:8px 8px 0 0;
+       color:var(--muted); cursor:pointer; font-size:12px; padding:8px 16px; transition:.15s; user-select:none; }
+.tab.active { background:var(--card); border-color:var(--blue); color:var(--blue); border-bottom-color:var(--card); }
+.tab .tdot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:6px; }
+.tab.online .tdot { background:var(--green); }
+.tab.offline .tdot { background:var(--muted); }
+
+main { padding:0 28px 60px; }
+.room-panel { display:none; padding-top:20px; }
+.room-panel.active { display:block; }
+.sec { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin:20px 0 10px; }
+
+.grid { display:grid; gap:12px; }
+.g3 { grid-template-columns: repeat(auto-fill,minmax(170px,1fr)); }
+.g2 { grid-template-columns: repeat(auto-fill,minmax(220px,1fr)); }
+.g1 { grid-template-columns:1fr; max-width:320px; }
+
+.scard { background:var(--card); border:1px solid var(--border); border-radius:12px;
+         padding:16px 18px; position:relative; overflow:hidden; }
+.scard-label { font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+.scard-val { font-size:34px; font-weight:300; line-height:1; letter-spacing:-1px; }
+.scard-val .unit { font-size:14px; color:var(--muted); margin-left:2px; }
+.scard-sub { font-size:11px; color:var(--muted); margin-top:5px; }
+.scard-bar { position:absolute; bottom:0; left:0; width:36px; height:3px; border-radius:0 2px 0 0; }
+
+/* CO card speciale */
+.co-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; }
+.co-card.co-warn { border-color:var(--orange); }
+.co-card.co-high { border-color:var(--red); background:#1a0e0e; }
+.co-bar-wrap { height:10px; background:rgba(255,255,255,0.06); border-radius:5px; margin:10px 0 6px; overflow:hidden; }
+.co-bar-fill { height:100%; border-radius:5px; transition:width .5s; }
+.co-badge { display:inline-block; font-size:10px; font-weight:600; letter-spacing:1.5px;
+            padding:3px 10px; border-radius:4px; }
+.badge-safe { background:rgba(45,224,165,.15); color:var(--green); }
+.badge-warn { background:rgba(255,170,54,.15); color:var(--orange); }
+.badge-high { background:rgba(255,94,94,.2); color:var(--red); }
+
+.chart-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-top:12px; }
+.chart-card canvas { max-height:240px; }
+
+.meta { display:flex; gap:20px; flex-wrap:wrap; font-size:11px; color:var(--muted); margin-bottom:6px; }
+.meta strong { color:var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="dot"></span>House <em>Sensors</em> <span style="font-size:12px;color:var(--muted);font-weight:400">v3</span></div>
+  <span id="ts">non connesso</span>
+</header>
+
+<div class="config">
+  <label>API</label>
+  <input id="api-url" type="text" placeholder="https://your-backend.onrender.com">
+  <button class="btn" onclick="connect()">Connetti</button>
+  <span id="err"></span>
+</div>
+
+<!-- Banner alert CO -->
+<div class="co-banner" id="co-banner">
+  <span>⚠ <strong>ATTENZIONE CO:</strong> <span id="co-banner-msg"></span></span>
+</div>
+
+<div class="room-tabs" id="tabs"></div>
+<main id="main-content"></main>
+
+<script>
+let API = localStorage.getItem('api') || '';
+document.getElementById('api-url').value = API;
+const COLORS = ['#4fa8ff','#2de0a5','#ffaa36','#ff5e5e','#b07aff','#ff9f6e','#36e0e0','#ffd36e'];
+let charts = {};
+
+async function connect() {
+  API = document.getElementById('api-url').value.trim().replace(/\/$/,'');
+  localStorage.setItem('api', API);
+  document.getElementById('err').textContent = '';
+  try { await loadAll(); }
+  catch(e) { document.getElementById('err').textContent = 'Errore: ' + e.message; }
+}
+
+async function loadAll() {
+  const [rooms, latest] = await Promise.all([fetchJSON('/api/rooms'), fetchJSON('/api/latest')]);
+  buildTabs(rooms, latest);
+  checkCoAlerts(latest);
+  document.getElementById('ts').textContent = 'Aggiornato ' + new Date().toLocaleTimeString();
+}
+
+async function fetchJSON(path) {
+  if (!API) throw new Error('Inserisci URL API');
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(r.status + ' ' + r.statusText);
+  return r.json();
+}
+
+function checkCoAlerts(latest) {
+  const highRooms = [];
+  Object.entries(latest).forEach(([room, d]) => {
+    if (d.co_level === 'high' || d.co_level === 'warn') {
+      highRooms.push(`${room.replace(/_/g,' ')}: ${d.co_ppm?.toFixed(0)} ppm (${d.co_level.toUpperCase()})`);
+    }
+  });
+  const banner = document.getElementById('co-banner');
+  if (highRooms.length) {
+    banner.classList.add('show');
+    document.getElementById('co-banner-msg').textContent = highRooms.join(' | ');
+  } else {
+    banner.classList.remove('show');
+  }
+}
+
+function buildTabs(rooms, latest) {
+  const tabsEl = document.getElementById('tabs');
+  const mainEl = document.getElementById('main-content');
+  const existing = new Set([...tabsEl.querySelectorAll('.tab')].map(t=>t.dataset.room));
+
+  rooms.forEach(({room}) => {
+    const d = latest[room] || {};
+    const recAt = d.received_at ? new Date(d.received_at) : null;
+    const online = recAt && (Date.now() - recAt) / 1000 < 120;
+
+    if (!existing.has(room)) {
+      const tab = document.createElement('div');
+      tab.className = `tab ${online?'online':'offline'}`;
+      tab.dataset.room = room;
+      tab.innerHTML = `<span class="tdot"></span>${room.replace(/_/g,' ')}`;
+      tab.onclick = () => selectTab(room);
+      tabsEl.appendChild(tab);
+      const panel = document.createElement('div');
+      panel.className = 'room-panel';
+      panel.id = 'panel-' + room;
+      mainEl.appendChild(panel);
+    }
+    renderRoom(room, d);
+  });
+
+  if (!tabsEl.querySelector('.tab.active') && rooms.length)
+    selectTab(rooms[0].room);
+}
+
+function selectTab(room) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.room===room));
+  document.querySelectorAll('.room-panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+room));
+  loadRoomHistory(room);
+}
+
+function renderRoom(room, d) {
+  const panel = document.getElementById('panel-' + room);
+  if (!panel) return;
+  const recAt = d.received_at ? new Date(d.received_at) : null;
+  const ageSec = recAt ? Math.round((Date.now()-recAt)/1000) : null;
+
+  let html = `<div class="meta">
+    <span>Nodo: <strong>${d.node_id||'—'}</strong></span>
+    <span>Ultimo pacchetto: <strong>${recAt?recAt.toLocaleTimeString():'—'}</strong></span>
+    ${ageSec!==null?`<span>Età: <strong>${ageSec}s</strong></span>`:''}
+    ${d.wifi_rssi?`<span>RSSI: <strong>${d.wifi_rssi} dBm</strong></span>`:''}
+  </div>`;
+
+  // Temperatura / Umidità (DHT22)
+  const temps = d.temperature || [];
+  if (temps.length) {
+    html += `<div class="sec">Temperatura &amp; Umidità (DHT22)</div><div class="grid g3">`;
+    temps.forEach((t,i) => {
+      const col = COLORS[i % COLORS.length];
+      const tv = t.temp_c != null ? t.temp_c.toFixed(1) : '—';
+      const hv = t.humid_pct != null ? t.humid_pct.toFixed(1) : '—';
+      html += `<div class="scard">
+        <div class="scard-label">DHT22 #${t.sensor_num}</div>
+        <div class="scard-val" style="color:${col}">${tv}<span class="unit">°C</span></div>
+        <div class="scard-sub">Umidità: ${hv}%</div>
+        <div class="scard-bar" style="background:${col}"></div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Pressione (BMP180)
+  if (d.pressure_hpa != null) {
+    html += `<div class="sec">Pressione (BMP180)</div><div class="grid g1">
+      <div class="scard">
+        <div class="scard-label">Pressione barometrica</div>
+        <div class="scard-val" style="color:var(--orange)">${d.pressure_hpa.toFixed(1)}<span class="unit">hPa</span></div>
+        <div class="scard-sub">Altitudine ≈ ${d.altitude_m!=null?d.altitude_m.toFixed(0):'—'} m</div>
+        <div class="scard-bar" style="background:var(--orange)"></div>
+      </div></div>`;
+  }
+
+  // CO (MQ-7)
+  if (d.co_ppm != null || d.co_level) {
+    const ppm   = d.co_ppm ?? 0;
+    const level = d.co_level ?? 'unknown';
+    const pct   = Math.min(100, (ppm / 200) * 100);
+    const barColor = level==='high' ? 'var(--red)' : level==='warn' ? 'var(--orange)' : 'var(--green)';
+    const badgeClass = `badge-${level}`;
+    const cardClass  = level==='high'?'co-high':level==='warn'?'co-warn':'';
+
+    html += `<div class="sec">Monossido di Carbonio (MQ-7)</div>
+    <div class="co-card ${cardClass}">
+      <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:4px;">
+        <div class="scard-val" style="color:${barColor}">${ppm.toFixed(0)}<span class="unit">ppm</span></div>
+        <span class="co-badge ${badgeClass}">${level.toUpperCase()}</span>
+      </div>
+      <div class="co-bar-wrap">
+        <div class="co-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+      </div>
+      <div class="scard-sub">Range: 20–2000 ppm · SAFE &lt;35 · WARN 35-70 · HIGH &gt;70 · ADC raw: ${d.co_raw_adc??'—'}</div>
+    </div>`;
+  }
+
+  // Chart placeholder
+  html += `<div class="sec">Storico temperatura (24h)</div>
+    <div class="chart-card"><canvas id="chart-${room}"></canvas></div>`;
+
+  panel.innerHTML = html;
+}
+
+async function loadRoomHistory(room) {
+  try {
+    const rows = await fetchJSON(`/api/history?room=${room}&hours=24&limit=500`);
+    drawChart(room, rows);
+  } catch(e) { console.warn('History load failed:', e); }
+}
+
+function drawChart(room, rows) {
+  const byTime = {};
+  rows.forEach(r => {
+    if (!byTime[r.received_at]) byTime[r.received_at] = {};
+    if (r.sensor_num && r.temp_c != null)
+      byTime[r.received_at][`T${r.sensor_num}`] = r.temp_c;
+    if (r.co_ppm != null)
+      byTime[r.received_at]['CO'] = r.co_ppm;
+  });
+
+  const sorted  = Object.entries(byTime).sort(([a],[b]) => a.localeCompare(b));
+  const labels  = sorted.map(([t]) => new Date(t).toLocaleTimeString());
+
+  const datasets = [
+    { label:'DHT22 #1 °C', data:sorted.map(([,v])=>v['T1']??null), borderColor:COLORS[0], backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, tension:.3, spanGaps:true, yAxisID:'temp' },
+    { label:'DHT22 #2 °C', data:sorted.map(([,v])=>v['T2']??null), borderColor:COLORS[1], backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, tension:.3, spanGaps:true, yAxisID:'temp' },
+    { label:'CO ppm',       data:sorted.map(([,v])=>v['CO']??null), borderColor:'#ff5e5e',  backgroundColor:'rgba(255,94,94,.08)', borderWidth:1.5, pointRadius:0, tension:.3, spanGaps:true, yAxisID:'co', fill:true },
+  ].filter(ds => ds.data.some(v=>v!=null));
+
+  const canvas = document.getElementById(`chart-${room}`);
+  if (!canvas) return;
+  if (charts[room]) charts[room].destroy();
+
+  charts[room] = new Chart(canvas.getContext('2d'), {
+    type:'line', data:{ labels, datasets },
+    options:{
+      responsive:true, interaction:{ mode:'index', intersect:false },
+      plugins:{ legend:{ labels:{ color:'#5a6480', font:{family:'IBM Plex Mono',size:10} } } },
+      scales:{
+        x:{ ticks:{color:'#5a6480',maxTicksLimit:10,font:{size:10}}, grid:{color:'rgba(255,255,255,0.03)'} },
+        temp:{ type:'linear', position:'left',  ticks:{color:'#4fa8ff',font:{size:10},callback:v=>v.toFixed(1)+'°C'}, grid:{color:'rgba(255,255,255,0.03)'} },
+        co:  { type:'linear', position:'right', ticks:{color:'#ff5e5e',font:{size:10},callback:v=>v+'ppm'},          grid:{drawOnChartArea:false} },
+      },
+    },
+  });
+}
+
+if (API) connect();
+setInterval(()=>{ if(API) loadAll().catch(()=>{}); }, 30000);
+</script>
+</body>
+</html>
