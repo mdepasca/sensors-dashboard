@@ -120,6 +120,7 @@ let API = localStorage.getItem('api') || '';
 document.getElementById('api-url').value = API;
 const COLORS = ['#4fa8ff','#2de0a5','#ffaa36','#ff5e5e','#b07aff','#ff9f6e','#36e0e0','#ffd36e'];
 let charts = {};
+const historyRequests = {};
 
 async function connect() {
   API = document.getElementById('api-url').value.trim().replace(/\/$/,'');
@@ -133,6 +134,8 @@ async function loadAll() {
   const [rooms, latest] = await Promise.all([fetchJSON('/api/rooms'), fetchJSON('/api/latest')]);
   buildTabs(rooms, latest);
   checkCoAlerts(latest);
+  const activeTab = document.querySelector('.tab.active');
+  if (activeTab) loadRoomHistory(activeTab.dataset.room);
   document.getElementById('ts').textContent = 'Aggiornato ' + new Date().toLocaleTimeString();
 }
 
@@ -185,13 +188,13 @@ function buildTabs(rooms, latest) {
   });
 
   if (!tabsEl.querySelector('.tab.active') && rooms.length)
-    selectTab(rooms[0].room);
+    selectTab(rooms[0].room, false);
 }
 
-function selectTab(room) {
+function selectTab(room, loadHistory = true) {
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.room===room));
   document.querySelectorAll('.room-panel').forEach(p=>p.classList.toggle('active', p.id==='panel-'+room));
-  loadRoomHistory(room);
+  if (loadHistory) loadRoomHistory(room);
 }
 
 function renderRoom(room, d) {
@@ -266,8 +269,11 @@ function renderRoom(room, d) {
 }
 
 async function loadRoomHistory(room) {
+  const requestId = (historyRequests[room] || 0) + 1;
+  historyRequests[room] = requestId;
   try {
-    const rows = await fetchJSON(`/api/history?room=${room}&hours=24&limit=500`);
+    const rows = await fetchJSON(`/api/history?room=${encodeURIComponent(room)}&hours=24&limit=500`);
+    if (historyRequests[room] !== requestId) return;
     drawChart(room, rows);
   } catch(e) { console.warn('History load failed:', e); }
 }
@@ -290,6 +296,7 @@ function drawChart(room, rows) {
     { label:'DHT22 #2 °C', data:sorted.map(([,v])=>v['T2']??null), borderColor:COLORS[1], backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, tension:.3, spanGaps:true, yAxisID:'temp' },
     { label:'CO ppm',       data:sorted.map(([,v])=>v['CO']??null), borderColor:'#ff5e5e',  backgroundColor:'rgba(255,94,94,.08)', borderWidth:1.5, pointRadius:0, tension:.3, spanGaps:true, yAxisID:'co', fill:true },
   ].filter(ds => ds.data.some(v=>v!=null));
+  const hasCo = datasets.some(ds => ds.yAxisID === 'co');
 
   const canvas = document.getElementById(`chart-${room}`);
   if (!canvas) return;
@@ -303,7 +310,9 @@ function drawChart(room, rows) {
       scales:{
         x:{ ticks:{color:'#5a6480',maxTicksLimit:10,font:{size:10}}, grid:{color:'rgba(255,255,255,0.03)'} },
         temp:{ type:'linear', position:'left',  ticks:{color:'#4fa8ff',font:{size:10},callback:v=>v.toFixed(1)+'°C'}, grid:{color:'rgba(255,255,255,0.03)'} },
-        co:  { type:'linear', position:'right', ticks:{color:'#ff5e5e',font:{size:10},callback:v=>v+'ppm'},          grid:{drawOnChartArea:false} },
+        ...(hasCo ? {
+          co: { type:'linear', position:'right', ticks:{color:'#ff5e5e',font:{size:10},callback:v=>v+'ppm'}, grid:{drawOnChartArea:false} },
+        } : {}),
       },
     },
   });
